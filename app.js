@@ -1,33 +1,41 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 /**
  * Module dependencies.
  */
 
 // mongoose setup
 require('./mongoose-db');
-require('./typeorm-db')
+require('./typeorm-db');
 
-var st = require('st');
-var crypto = require('crypto');
-var express = require('express');
-var http = require('http');
-var path = require('path');
-var ejsEngine = require('ejs-locals');
-var bodyParser = require('body-parser');
-var session = require('express-session')
-var methodOverride = require('method-override');
-var logger = require('morgan');
-var errorHandler = require('errorhandler');
-var optional = require('optional');
-var marked = require('marked');
-var fileUpload = require('express-fileupload');
-var dust = require('dustjs-linkedin');
-var dustHelpers = require('dustjs-helpers');
-var cons = require('consolidate');
-const hbs = require('hbs')
+const https = require('https');
+const http = require('http');
+const path = require('path');
+const fs = require('fs');
 
-var app = express();
-var routes = require('./routes');
-var routesUsers = require('./routes/users.js')
+const st = require('st');
+// var crypto = require('crypto');
+const express = require('express');
+const ejsEngine = require('ejs-locals');
+const bodyParser = require('body-parser');
+// var session = require('express-session')
+const methodOverride = require('method-override');
+const logger = require('morgan');
+const errorHandler = require('errorhandler');
+// var optional = require('optional');
+const marked = require('marked');
+const fileUpload = require('express-fileupload');
+// var dust = require('dustjs-linkedin');
+const dustHelpers = require('dustjs-helpers');
+const cons = require('consolidate');
+const hbs = require('hbs');
+const csrf = require('csurf');
+
+
+const app = express();
+const routes = require('./routes');
+const routesUsers = require('./routes/users.js');
 
 // all environments
 app.set('port', process.env.PORT || 3001);
@@ -39,14 +47,32 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 app.use(logger('dev'));
 app.use(methodOverride());
-app.use(session({
-  secret: 'keyboard cat',
+app.use(require('express-session')({
+  secret: process.env.SESSION_SECRET || 'keyboard cat',
   name: 'connect.sid',
-  cookie: { path: '/' }
-}))
+  cookie: {
+    path: '/',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    domain: process.env.COOKIE_DOMAIN || undefined,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+  },
+  resave: false,
+  saveUninitialized: false,
+}));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(fileUpload());
+
+// CSRF Protection
+const csrfProtection = csrf({ cookie: false });
+app.use(csrfProtection);
+
+// Make CSRF token available to all views
+app.use((req, res, next) => {
+  res.locals.csrfToken = req.csrfToken();
+  next();
+});
 
 // Routes
 app.use(routes.current_user);
@@ -59,14 +85,13 @@ app.post('/account_details', routes.isLoggedIn, routes.save_account_details);
 app.get('/logout', routes.logout);
 app.post('/create', routes.create);
 app.get('/destroy/:id', routes.destroy);
-app.get('/edit/:id', routes.edit);
 app.post('/update/:id', routes.update);
 app.post('/import', routes.import);
 app.get('/about_new', routes.about_new);
 app.get('/chat', routes.chat.get);
 app.put('/chat', routes.chat.add);
 app.delete('/chat', routes.chat.delete);
-app.use('/users', routesUsers)
+app.use('/users', routesUsers);
 
 // Static
 app.use(st({ path: './public', url: '/public' }));
@@ -80,9 +105,20 @@ if (app.get('env') == 'development') {
   app.use(errorHandler());
 }
 
-var token = 'SECRET_TOKEN_f8ed84e8f41e4146403dd4a6bbcea5e418d23a9';
-console.log('token: ' + token);
+const token = process.env.SECRET_TOKEN || 'SECRET_TOKEN_f8ed84e8f41e4146403dd4a6bbcea5e418d23a9';
+console.log(`token: ${ token}`);
 
-http.createServer(app).listen(app.get('port'), function () {
-  console.log('Express server listening on port ' + app.get('port'));
-});
+// Use HTTPS in production, HTTP in development
+if (process.env.NODE_ENV === 'production') {
+  const httpsOptions = {
+    key: fs.readFileSync(process.env.SSL_KEY_PATH || './key.pem'),
+    cert: fs.readFileSync(process.env.SSL_CERT_PATH || './cert.pem'),
+  };
+  https.createServer(httpsOptions, app).listen(app.get('port'), () => {
+    console.log(`Express server listening on port ${ app.get('port') } (HTTPS)`);
+  });
+} else {
+  http.createServer(app).listen(app.get('port'), () => {
+    console.log(`Express server listening on port ${ app.get('port') } (HTTP - Development Only)`);
+  });
+}
