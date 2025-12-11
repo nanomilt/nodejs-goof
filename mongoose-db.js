@@ -1,15 +1,15 @@
-var mongoose = require('mongoose');
-var cfenv = require("cfenv");
-var Schema = mongoose.Schema;
+const mongoose = require('mongoose');
+const cfenv = require('cfenv');
+const Schema = mongoose.Schema;
 
-var Todo = new Schema({
+const Todo = new Schema({
   content: Buffer,
   updated_at: Date,
 });
 
 mongoose.model('Todo', Todo);
 
-var User = new Schema({
+let User = new Schema({
   username: String,
   password: String,
 });
@@ -17,15 +17,16 @@ var User = new Schema({
 mongoose.model('User', User);
 
 // CloudFoundry env vars
-var mongoCFUri = cfenv.getAppEnv().getServiceURL('goof-mongo');
+const mongoCFUri = cfenv.getAppEnv().getServiceURL('goof-mongo');
 console.log(JSON.stringify(cfenv.getAppEnv()));
 
 // Default Mongo URI is local
-const DOCKER = process.env.DOCKER
+const DOCKER = process.env.DOCKER;
+let mongoUri;
 if (DOCKER === '1') {
-  var mongoUri = 'mongodb://goof-mongo/express-todo';
+  mongoUri = 'mongodb://goof-mongo/express-todo';
 } else {
-  var mongoUri = 'mongodb://localhost/express-todo';
+  mongoUri = 'mongodb://localhost/express-todo';
 }
 
 
@@ -40,16 +41,16 @@ if (mongoCFUri) {
   mongoUri = process.env.MONGODB_URI;
 }
 
-console.log("Using Mongo URI " + mongoUri);
+console.log(`Using Mongo URI ${ mongoUri}`);
 
 mongoose.connect(mongoUri);
 
 User = mongoose.model('User');
-User.find({ username: 'admin@snyk.io' }).exec(function (err, users) {
+User.find({ username: 'admin@snyk.io' }).exec((err, users) => {
   console.log(users);
   if (users.length === 0) {
     console.log('no admin');
-    new User({ username: 'admin@snyk.io', password: 'SuperSecretPassword' }).save(function (err, user, count) {
+    new User({ username: 'admin@snyk.io', password: 'SuperSecretPassword' }).save((err, _user, _count) => {
       if (err) {
         console.log('error saving admin user');
       }
